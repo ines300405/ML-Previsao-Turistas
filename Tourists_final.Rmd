@@ -1,0 +1,549 @@
+---
+title: "Trabalho ML"
+author: "Grupo 1"
+date: "2025-10-02"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# Bibliotecas utilizadas
+#install.packages("fpp3")
+library(fpp3)
+#install.packages("knitr")  
+library(knitr)
+#install.packages("feasts") 
+library(feasts)
+#install.packages("fabletools") 
+library(fabletools)
+#install.packages("scales") 
+library(scales)
+#install.packages("openxlsx")
+library(openxlsx) # utilizada para guardar o dataframe em um ficheiro xlsx
+```
+
+```{r}
+# Leitura do dataset
+bd <- read.csv("turistasPT.csv", header = T, sep = ",")
+
+# Visualização dos dados
+head(bd) # inicio em 2013
+```
+
+```{r}
+tail(bd) # mostra as últimas observações do data frame (ano de 2025)
+
+dim(bd) # mostra as dimensões do data frame (151 observações de 2 variáveis)
+
+names(bd) # lista os nomes das 2 variáveis 
+```
+
+```{r}
+# conversão de Date para yearmonth e criação tsibble (série temporal)
+turistas <- bd |>
+  mutate(Date = yearmonth(Date)) |> 
+  as_tsibble(index = Date)
+
+# gráfico da série temporal
+# theme() - personaliza o gráfico
+# scale_x_yearmonth() - formata o eixo X quando os dados têm classe yearmonth
+autoplot(turistas, Tourists) +
+  labs(
+    title = "Chegada de Turistas a Portugal (2013–2025)",
+    x = "Mês e Ano",
+    y = "Turistas (em Milhões)"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title = element_text(size = 12, face = "bold", hjust = 0.5),
+    axis.title.x = element_text(size = 10, face = "bold"),
+    axis.title.y = element_text(size = 10, face = "bold"),  
+    panel.grid.minor = element_line(color = "white"),
+    panel.grid.major.x = element_line(color = "white"),
+    panel.grid.major.y = element_line(color = "grey85"),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  ) +
+  scale_x_yearmonth(
+    breaks = yearmonth("2013 Jan") + seq(0, 150, by = 12),
+    date_labels = "%b %Y"
+  ) +
+  geom_line(color = "#F9B378", linewidth = 1.1) +
+  geom_point(color = "#F9B378", size = 2)
+```
+
+## Retirar os meses problemáticos (devido ao covid)
+
+```{r}
+turistas_sem_covid <- turistas[-c(87:110),] # março de 2020 a fevereiro de 2022
+```
+
+```{r}
+# gráfico da série temporal sem o covid
+autoplot(turistas_sem_covid, Tourists) +
+  labs(
+    title = "Chegada de Turistas Mensal a Portugal, sem período covid (2013–2025)",
+    x = "Mês e Ano",
+    y = "Turistas (em Milhões)"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title = element_text(size = 12, face = "bold", hjust = 0.5),
+    axis.title.x = element_text(size = 10, face = "bold"),
+    axis.title.y = element_text(size = 10, face = "bold"),  
+    panel.grid.minor = element_line(color = "white"),
+    panel.grid.major.x = element_line(color = "white"),
+    panel.grid.major.y = element_line(color = "grey85"),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  ) +
+  scale_x_yearmonth(
+    breaks = yearmonth("2013 Jan") + seq(0, 150, by = 12),
+    date_labels = "%b %Y"
+  ) +
+  geom_line(color = "#F9B378", linewidth = 1.1) +
+  geom_point(color = "#F9B378", size = 2)
+```
+
+```{r}
+# Para a visualizaçao gráfica criou-se um dataset acrescentando a variável 
+# new_index para não aparecer o intervalo do covid como uma linha reta
+turistas_graphs <- turistas_sem_covid |>
+    mutate(new_index = row_number())
+```
+
+```{r}
+# gráfico com eixo x formatado e linha tracejada no ponto de corte (fev 2020)
+# geom_vline() insere uma linha vertical a tracejado no ponto de corte
+# annotate() adiciona a legenda “Corte COVID-19” junto à linha de corte
+# scale_x_continuous() define o espaçamento e formato da legenda do eixo X 
+# (1 por ano)
+ggplot(turistas_graphs, aes(x = new_index, y = Tourists)) +
+  geom_line(color = "#F9B378", linewidth = 1.1) +
+  geom_point(color = "#F9B378", size = 2) +
+  geom_vline(
+    xintercept = which(turistas_graphs[["Date"]] == yearmonth("2020 Feb")),
+    linetype = "dashed", color = "grey40", size = 0.75
+  ) +
+  annotate(
+    "text",
+    x = which(turistas_graphs[["Date"]] == yearmonth("2020 Feb")) + 3,
+    y = max(turistas_graphs$Tourists, na.rm = TRUE),
+    label = "Corte COVID-19", fontface = "bold",
+    hjust = 0.1, vjust = -0.2, size = 3.5, color = "grey30"
+  ) +
+  scale_x_continuous(
+    breaks = seq(1, nrow(turistas_graphs), by = 12),
+    labels = format(turistas_graphs[["Date"]]
+                    [seq(1, nrow(turistas_graphs), by = 12)], "%b %Y")
+  ) +
+  labs(
+    title = "Chegada de Turistas a Portugal (2013–2025) com corte COVID-19",
+    x = "Mês e Ano",
+    y = "Turistas (em Milhões)"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title = element_text(size = 12, face = "bold", hjust = 0.5),
+    axis.title.x = element_text(size = 10, face = "bold"),
+    axis.title.y = element_text(size = 10, face = "bold"),
+    axis.text.x = element_text(size = 10, face = "bold", angle = 45, hjust = 1),
+    panel.grid = element_blank(),
+    panel.grid.major.x = element_line(color = "white"),
+    panel.grid.major.y = element_line(color = "grey85")
+  )
+```
+
+## Ajustes das Datas na Série
+
+```{r}
+# Para ser possível analisar os lags, autocorrelações e ciclos sazonais criou-se 
+# um dataset onde a variável temporal foi ajustada:
+# - Jan 2013 corresponderá a Jan 2015
+# - Fev 2020 corresponderá a Fev 2022
+# O restante da série temporal manteve-se como estava (Março de 2022 até Julho 
+# de 2025)
+turistas_final <- turistas_sem_covid |>
+  mutate(
+    Date = yearmonth("2015 Jan") + (row_number() - 1)  # cria sequência mensal
+  ) |>
+  as_tsibble(index = Date)
+```
+
+## Gráfico da Série Temporal (após o ajuste das datas)
+
+```{r}
+# theme() - personaliza o gráfico
+autoplot(turistas_final, Tourists) +
+  labs(
+    title = "Chegada de Turistas Mensal a Portugal com ajustes nas datas (2015–2025)",
+    x = "Mês e Ano",
+    y = "Turistas (em Milhões)"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title = element_text(size = 12, face = "bold", hjust = 0.5),
+    axis.title.x = element_text(size = 10, face = "bold"),
+    axis.title.y = element_text(size = 10, face = "bold"),  
+    panel.grid.minor = element_line(color = "white"),
+    panel.grid.major.x = element_line(color = "white"),
+    panel.grid.major.y = element_line(color = "grey85"),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  ) +
+  scale_x_yearmonth(
+    breaks = yearmonth("2013 Jan") + seq(0, 150, by = 12),
+    date_labels = "%b %Y"
+  ) +
+  geom_line(color = "#F9B378", linewidth = 1.1) +
+  geom_point(color = "#F9B378", size = 2)
+```
+
+## Análise de Sazonalidade (após o ajuste das datas)
+
+```{r}
+# análise da sazonalidade com gg_season()
+turistas_final |> 
+  gg_season(Tourists, labels = "both") + 
+  labs(title = "Análise da sazonalidade - Tourists", x = "", y = "") +
+  theme(
+    plot.title = element_text(size = 12, face = "bold")
+  )
+
+# análise da sazonalidade com ggsubseries()
+turistas_final |>
+  gg_subseries(Tourists) +
+  labs(title = "Subséries mensais - Tourists", x = "", y = "") +
+  scale_x_yearmonth(
+    breaks = yearmonth(c("2015 Jan", "2020 Jan", "2025 Jan")),
+    labels = c("2015", "2020", "2025")
+  ) +
+  theme(
+    axis.text.x = element_text(size = 7),   
+    plot.title = element_text(size = 12, face = "bold")  
+  )
+
+# gg_lag() - Gráficos com os lags de 1 a 14
+turistas_final |>
+  gg_lag(Tourists, lags = 1:14, geom = "point") +
+  labs(x = "Desfasamento (Turistas, lag)", y = "") +
+  theme(
+    axis.title.x = element_text(size = 10, face = "bold"),
+    legend.title = element_text(face = "bold"),
+    legend.text = element_text(face = "bold")
+  )
+```
+
+```{r}
+# Visualização da série temporal após retirar os anos do covid
+
+# gg_tsdisplay() permite visualizar simultaneamente:
+# - A série temporal no tempo;
+# - A função de autocorrelação (ACF);
+# - A função de autocorrelação parcial (PACF)
+
+turistas_final |>
+  gg_tsdisplay(Tourists, plot_type='partial', lag_max = 12)
+```
+
+## Aplicar Teste de Estacionaridade
+
+```{r}
+# Se p-value < 0.05 rejeitamos a H0: a série é estacionária 
+turistas_final |>
+  features(Tourists, unitroot_kpss)
+
+# Rejeita-se H0: conclui-se que a série não é considerada estacionária 
+# (a partir da análise gráfica observa-se o mesmo)
+```
+
+## Verificar a necessidade de diferenciar a Série
+
+```{r}
+# a função unitroot_ndiffs permite ver quantas diferenciações são necessárias 
+# para que a série se torne estacionária
+turistas_final |>
+  features(Tourists, unitroot_ndiffs)
+
+# a função unitroot_nsdiffs permite ver quantas diferenciações sazonais são 
+# necessárias
+turistas_final |> 
+  features(Tourists, list(unitroot_nsdiffs, feat_stl))
+```
+
+## Estacionarizar a Série
+
+```{r}
+# Transformação Logarítmica (para estabilizar a variância)
+# scale_x_yearmonth() - formata o eixo X quando os dados têm classe yearmonth
+autoplot(turistas_final, log(Tourists)) +
+  geom_line(color = "#F9B378", linewidth = 1.1) +
+  geom_point(color = "#F9B378", size = 2) +
+  scale_x_yearmonth(date_breaks = "1 year", date_labels = "%Y") +
+  labs(
+    title = "Logaritmo da Chegada de Turistas Mensal em Portugal (2015–2025)",
+    x = "Ano",
+    y = "Turistas (em Milhões)"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title = element_text(size = 12, face = "bold", hjust = 0.5),
+    axis.title.x = element_text(size = 10, face = "bold"),
+    axis.title.y = element_text(size = 10, face = "bold"),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    panel.grid.minor = element_line(color = "white"),
+    panel.grid.major.x = element_line(color = "white"),
+    panel.grid.major.y = element_line(color = "grey85")
+  )
+```
+
+```{r}
+# Aplicar uma diferenciação na parte sazonal da série função unitroot_nsdiffs e 
+# verificar se a série não necessita de outra diferenciação sazonal com recurso 
+# à função unitroot_nsdiffs
+turistas_final |>  
+  features(difference(log(Tourists), 12), list(unitroot_nsdiffs, feat_stl)) 
+
+# Aplicar uma diferenciação na parte ordinária da série após a diferenciação 
+# sazonal e verificar se a série não necessita de outra diferenciação com 
+# recurso à função unitroot_ndiffs
+turistas_final |>
+  features(difference(difference(log(Tourists), 12)), unitroot_ndiffs)
+```
+
+```{r}
+# Verificar se após as transformações a série é estacionária
+turistas_final |>
+  features(difference(log(Tourists), 12) |> difference(), unitroot_kpss)
+
+# Concluiu-se que agora a série é estacionária pois não rejeitamos H0 
+```
+
+```{r}
+# Visualização da série estacionária
+autoplot(turistas_final, difference(log(Tourists), 12) |> difference()) +
+  geom_line(color = "#F9B378", linewidth = 1.1) +
+  geom_point(color = "#F9B378", size = 2) +
+  scale_x_yearmonth(date_breaks = "1 year", date_labels = "%Y") +
+  labs(title = "", x = "", y = "") +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title = element_text(size = 12, face = "bold", hjust = 0.5),
+    axis.title.x = element_text(size = 10, face = "bold"),
+    axis.title.y = element_text(size = 10, face = "bold"),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    panel.grid.minor = element_line(color = "white"),
+    panel.grid.major.x = element_line(color = "white"),
+    panel.grid.major.y = element_line(color = "grey85")
+  )
+```
+
+```{r}
+# Com a diferenciação sazonal e ordinária observa-se os correlogramas para obter 
+# a ordem dos modelos da componente sazonal e não sazonal
+turistas_final |>
+  gg_tsdisplay(
+    difference(log(Tourists), 12) |> difference(), 
+    plot_type = 'partial', 
+    lag_max = 48
+  )
+```
+
+## Modelação
+
+```{r}
+# Modelos SARIMA
+fit_auto <- turistas_final |>
+  model(
+    arima410210 = ARIMA(log(Tourists) ~ pdq(4,1,0) + PDQ (2,1,0, period = 12)),
+    arima410011 = ARIMA(log(Tourists) ~ pdq(4,1,0) + PDQ (0,1,1, period = 12)),
+    arima014210 = ARIMA(log(Tourists) ~ pdq(0,1,4) + PDQ (2,1,0, period = 12)),
+    arima014011 = ARIMA(log(Tourists) ~ pdq(0,1,4) + PDQ (0,1,1, period = 12)),
+    auto = ARIMA(log(Tourists), stepwise = FALSE, approximation = FALSE)
+  )
+fit_auto
+```
+
+### Escolha do melhor modelo com base nos critérios de informação (melhor fit)
+
+```{r}
+# Tabela com todos os modelos e critérios AIC, AICc e BIC 
+# (valores menores, melhor fit)
+glance(fit_auto) |>
+  arrange(AICc) |>
+  select(.model:BIC)
+
+# o melhor modelo obtido foi o "auto" - ARIMA(1,1,1)(2,1,0)[12]
+```
+
+### Estimação dos Parâmetros do modelo escolhido (auto)
+
+```{r}
+# Visualização dos parâmetros do modelo escolhido (através da função "report")
+m <- colnames(fit_auto[5])
+cat("\n==============================\n")
+cat(">>> Modelo:", m, "\n")
+cat("==============================\n")
+print(report(fit_auto |> select(all_of(m))))
+```
+
+### Pressupostos dos Resíduos
+
+```{r}
+# Análise dos resíduos do melhor modelo "auto" - ARIMA(1,1,1)(2,1,0)[12]
+# gg_tsresiduals() - gera automaticamente três gráficos:
+# - Série temporal dos resíduos (verifica estabilidade e ausência de tendência);
+# - Distribuição dos resíduos;
+# - ACF dos resíduos (autocorrelação)
+fit_auto |>
+  select(auto) |>
+  gg_tsresiduals()
+```
+
+### Validação do modelo
+
+```{r}
+# Modelo auto: ARIMA(1,1,1)(2,1,0)[12]
+# Teste de ljung-box - Hipótese nula: ausência de autocorrrelação dos resíduos
+# lag = 24: verificar autocorrelação ao longo de dois ciclos sazonais completos
+# dof = p + q + P + Q, logo dof = 1 + 1 + 2 + 0 = 4
+augment(fit_auto |> select(auto)) |> 
+  features(.innov, ljung_box, lag = 24, dof = 4)
+
+# Conclusão: O teste de Ljung–Box (lag = 24) apresentou p-value = 0.77, ou seja, 
+# não rejeitamos a hipótese nula de ausência de autocorrelação
+
+# Assim, o modelo SARIMA(auto) é considerado válido
+```
+
+## Forecasting
+
+```{r}
+# Dividir o dataset em treino e teste (70/30)
+treino <- turistas_final |> 
+  filter(Date <= yearmonth("2022-05"))
+
+teste <- turistas_final |> 
+  filter(Date > yearmonth("2022-05"))
+```
+
+### Previsão dentro da amostra
+
+```{r}
+# Treinar o modelo com os dados de treino
+fit_auto_treino <- fit_auto |>
+  select(auto) |>
+  refit(new_data = treino)
+
+# forecast para o teste
+fc <- forecast(fit_auto_treino, new_data = teste)
+fc
+
+# avaliação da previsão
+acc_val <- accuracy(fc, teste)
+acc_val
+
+# Visualizar as previsões vs valores reais
+autoplot(fc, turistas_final) +
+  labs(
+    title = "Modelo ARIMA(1,1,1)(2,1,0)[12] – Previsão dentro da Amostra (teste)",
+    x = "Ano",
+    y = "Turistas (milhões)"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title = element_text(size = 12, face = "bold"),
+    axis.title.x = element_text(size = 10, face = "bold"),
+    axis.title.y = element_text(size = 10, face = "bold"),
+    legend.title = element_text(face = "bold")
+  )
+```
+
+### Previsão fora da amostra
+
+```{r}
+# previsão dos próximos 11 meses (fora da amostra)
+forecast <- fit_auto |>
+  select(auto) |>
+  forecast(h = "11 months") 
+
+# cópia
+forecast_df <- forecast[,c(2,4)]
+
+# Renomear a variável ".mean" para "Tourists"
+names(forecast_df)[2] <- "Tourists"
+
+# Visualizar os valores previstos arredondados a 3 casas decimais
+forecast_df$Tourists <- round(forecast_df$Tourists, 3)
+forecast_df
+```
+
+```{r}
+# Gráfico com as previsões fora da amostra (agosto de 2025 até junho de 2026)
+forecast |>
+  autoplot(turistas_final) +
+  labs(
+    title = "Modelo ARIMA(1,1,1)(2,1,0)[12] – Previsão fora da Amostra a 11 meses",
+    x= "Mês e Ano",
+    y = "Turistas (Milhões)"
+  ) +
+  theme(
+    plot.title = element_text(size = 12, face = "bold"),
+    axis.title.x = element_text(size = 10, face = "bold"),
+    axis.title.y = element_text(size = 10, face = "bold"),
+    legend.title = element_text(face = "bold")
+  )
+```
+
+## Criação de ficheiros excel auxiliares para comparações homólogas (anual e semestral)
+
+Não é preciso correr esta parte do código. Os ficheiros encontram-se na pasta 'FicheirosExcel_TaxaCrescimento' com os valores das taxas de variação homóloga, calculados no Excel.
+
+```{r}
+# Para testar, substituir o FALSE por TRUE
+if (FALSE) {
+  # Adicionar os dados previstos à série original
+  tourists_with_forecasts <- bind_rows(turistas_final, forecast_df)
+
+  # A função `write.xlsx()` permite criar um ficheiro do formato xlsx
+  # denominado em `file = `
+
+  # A função `aggregate()` permite agrupar as observações pelo elemento 
+  # após o `~` neste caso pelo ano
+
+  # O `sum` no final da função indica o tipo de operação a ser feita
+  write.xlsx(
+    aggregate(Tourists ~ format(Date, "%Y"), data = tourists_with_forecasts, sum),
+    file = "Turistas_Previsão_Anual.xlsx", sheetName = "Anual", overwrite = TRUE
+  ) 
+}
+```
+
+```{r}
+# A função `aggregate()` tem um objetivo semelhante ao caso anterior
+
+# Porém, o objetivo agora é fazer um agrupamento semestral dentro da 
+# função `paste()` foi feita uma transformação à variável `Date`, de modo a ser 
+# possível identificar o semestre
+
+# Separou-se o ano e dividiu-se o mês por seis com um arredondamento por excesso
+# (utilizando a função `ceiling()`), desta forma tendo em conta que os meses 
+# variam de 1 a 12, quando mês <= 6 será retornado o valor 1 (primeiro semestre) 
+# e 2 caso contrário
+
+# Para testar, substituir o FALSE por TRUE
+if (FALSE) {
+  res <- aggregate(
+    Tourists ~ paste(format(Date, "%Y"), 
+                     ceiling(as.numeric(format(Date, "%m")) / 6), sep = "-S"),
+    data = tourists_with_forecasts,
+    FUN = sum
+    )
+  
+  # renomear as colunas
+  names(res) <- c("Year_Semester", "Total_Tourists")
+  
+  write.xlsx(res, file = "Turistas_Previsão_Semestral.xlsx", 
+             sheetName = "Semestral", overwrite = TRUE)
+}
+```
